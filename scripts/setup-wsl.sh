@@ -20,6 +20,10 @@ if [[ -e "$target" ]]; then
   printf 'La destinazione esiste già: %s\nNon è stata modificata.\n' "$target" >&2
   exit 1
 fi
+if ! git --git-dir="$shared_repo" rev-parse --verify refs/heads/main >/dev/null 2>&1; then
+  printf '%s\n' 'Preparazione del repository di scambio dai sorgenti Windows...'
+  git -C "$windows_repo" push "$shared_repo" refs/heads/main:refs/heads/main
+fi
 mkdir -p -- "$(dirname -- "$target")"
 git clone --no-hardlinks --origin sync --branch main -- "$shared_repo" "$target"
 git -C "$target" config core.autocrlf input

@@ -8,7 +8,7 @@ La destinazione Linux è `~/projects/folio`. Per crearla, esegui nel terminale W
 bash /mnt/c/Users/Jacopo/Documents/Codex/2026-10-17/new-chat/folio/scripts/setup-wsl.sh
 ```
 
-Lo script non sovrascrive cartelle esistenti. Clona i sorgenti e installa le dipendenze Linux se trova Node Linux e npx. Non copia `node_modules`, build Windows o cache. La copia in WSL non è stata eseguita dalla sessione Codex, perché il servizio WSL ha restituito `Wsl/E_ACCESSDENIED`.
+Lo script non sovrascrive cartelle esistenti. Popola il repository di scambio se vuoto, clona i sorgenti e installa le dipendenze Linux se trova Node Linux e npx. Non copia `node_modules`, build Windows o cache. La copia in WSL non è stata eseguita dalla sessione Codex, perché il servizio WSL ha restituito `Wsl/E_ACCESSDENIED`. Anche il trasporto Git della sessione è bloccato all'avvio della shell: il repository di scambio è inizializzato ma verrà popolato dallo script in WSL. Il primo commit dei sorgenti Windows è già stato creato.
 
 ## Uso quotidiano
 
