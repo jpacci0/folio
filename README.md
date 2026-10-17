@@ -80,7 +80,9 @@ Il processo Electron espone solo `open`, `save`, `print` e `dirty`. I messaggi I
 
 ## Sviluppo
 
-Prerequisiti: Windows, Node.js 22.12+ oppure 24+, npm/npx. pnpm 11.25.0 è la versione usata per il lockfile.
+Prerequisiti: Windows oppure Linux/WSL, Node.js 22.12+ oppure 24+, npm/npx. pnpm 11.25.0 è la versione usata per il lockfile ed è fissata in `package.json`. In WSL con nvm puoi usare `nvm install` e `nvm use` dalla cartella del progetto (`.nvmrc`: Node 24).
+
+Per requisiti Linux, avvio desktop con WSLg e scambio delle modifiche tra Windows e WSL, vedi [Sviluppo Windows/WSL](docs/WINDOWS-WSL.md). Installa le dipendenze separatamente nei due ambienti; la creazione del pacchetto `.exe` va eseguita su Windows.
 
 ```powershell
 cd "$env:USERPROFILE\Documents\progetti\folio"
