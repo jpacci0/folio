@@ -1,0 +1,11 @@
+node_modules/
+dist/
+release/
+test-results/
+playwright-report/
+.cache/
+*.log
+*.tsbuildinfo
+public/pdf-assets/
+/test-home.png
+/test-editor.png
