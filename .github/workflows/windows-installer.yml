@@ -1,0 +1,77 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/windows-installer]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  installer:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Install locked dependencies
+        run: npx --yes pnpm@11.25.0 install --frozen-lockfile
+      - name: Test PDF engine
+        run: npx pnpm@11.25.0 test
+      - name: Build Windows app
+        run: npx pnpm@11.25.0 pack
+      - name: Build installer
+        run: npx pnpm@11.25.0 pack:installer --publish never
+      - name: Verify installed application
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $setup = Join-Path $PWD "release/Folio-$version-Setup-x64.exe"
+          if ((Get-Item -LiteralPath $setup).Length -lt 10000000) { throw 'Installer unexpectedly small' }
+          $installed = Join-Path $env:RUNNER_TEMP 'folio-installer-verification'
+          if (Test-Path -LiteralPath $installed) { throw 'Verification directory already exists' }
+          $process = Start-Process -FilePath $setup -ArgumentList "/S /currentuser /D=$installed" -WindowStyle Hidden -PassThru
+          if (-not $process.WaitForExit(120000)) { throw 'Installer timed out' }
+          if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
+          $env:FOLIO_TEST_EXECUTABLE = Join-Path $installed 'Folio.exe'
+          if (-not (Test-Path -LiteralPath $env:FOLIO_TEST_EXECUTABLE)) { throw 'Installed executable missing' }
+          npx pnpm@11.25.0 test:desktop
+          if ($LASTEXITCODE -ne 0) { throw 'Installed app smoke test failed' }
+          $hash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path -Leaf $setup)" | Set-Content -LiteralPath "$setup.sha256" -Encoding ascii
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Folio-Windows-installer
+          path: |
+            release/*-Setup-x64.exe
+            release/*-Setup-x64.exe.sha256
+          if-no-files-found: error
+          compression-level: 0
+      - name: Attach installer to matching existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = "v$version"
+          git diff --exit-code $tag -- src electron public scripts tests pnpm-lock.yaml
+          if ($LASTEXITCODE -ne 0) { throw 'Application differs from release tag; create a new version first' }
+          gh release view $tag --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Matching release does not exist' }
+          gh release upload $tag "release/Folio-$version-Setup-x64.exe" "release/Folio-$version-Setup-x64.exe.sha256" --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed; existing assets are never overwritten' }
