@@ -86,7 +86,7 @@ Nella copia Windows, da PowerShell:
 cd C:\Users\Jacopo\Documents\Codex\2026-10-17\new-chat\folio
 git pull --ff-only sync main
 npx pnpm@11.25.0 install --frozen-lockfile
-npx pnpm@11.25.0 pack
+npx pnpm@11.25.0 run pack
 ```
 
 Per modifiche fatte su Windows, esegui commit e push da Windows, poi pull in WSL. Il trasferimento è esplicito: Git non sincronizza automaticamente modifiche non committate. `--ff-only` evita merge inattesi; se le due copie divergono, fermati e risolvi il conflitto prima di proseguire.

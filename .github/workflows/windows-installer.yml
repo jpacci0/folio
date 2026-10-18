@@ -34,7 +34,7 @@ jobs:
       - name: Test PDF engine
         run: npx pnpm@11.25.0 test
       - name: Build Windows app
-        run: npx pnpm@11.25.0 pack
+        run: npx pnpm@11.25.0 run pack
       - name: Build installer
         run: npx pnpm@11.25.0 pack:installer --publish never
       - name: Verify installed application

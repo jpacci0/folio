@@ -107,7 +107,7 @@ npx pnpm@11.25.0 build
 npx pnpm@11.25.0 start
 ```
 
-Per la cartella Windows portatile: `npx pnpm@11.25.0 pack`. Il risultato è `release/Folio-Windows`: avvia `Folio.exe` e conserva accanto tutti gli altri file della cartella. Non richiede ulteriori strumenti di packaging. Per creare anche l'eseguibile autoestraente: `npx pnpm@11.25.0 pack:exe`; questo passaggio può scaricare gli strumenti NSIS. L'app già compilata funziona offline.
+Per la cartella Windows portatile: `npx pnpm@11.25.0 run pack`. Usa esplicitamente `run`: `pnpm pack` è un comando di pnpm che crea un archivio npm dei sorgenti. Il risultato dello script è `release/Folio-Windows`: avvia `Folio.exe` e conserva accanto tutti gli altri file della cartella. Non richiede ulteriori strumenti di packaging. Per creare anche l'eseguibile autoestraente: `npx pnpm@11.25.0 pack:exe`; questo passaggio può scaricare gli strumenti NSIS. L'app già compilata funziona offline.
 
 Per generare l'installer Windows, dopo `pack` esegui `npx pnpm@11.25.0 pack:installer`. Il risultato è `release/Folio-0.1.0-Setup-x64.exe`. La procedura guidata è disponibile in italiano e inglese. La disinstallazione conserva le preferenze dell'app. Pubblica il setup come allegato della Release GitHub, insieme all'eventuale portable; gli eseguibili restano esclusi dalla cronologia Git.
 
