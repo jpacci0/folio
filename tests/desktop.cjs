@@ -10,13 +10,14 @@ const assert = require('node:assert/strict');
   await fs.writeFile(input, await source.save());
   const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
   const executablePath = process.env.FOLIO_TEST_EXECUTABLE;
+  const launchStarted = Date.now();
   const app = await electron.launch({ executablePath, args: executablePath ? ['--test'] : ['.', '--test'], env, timeout: 30000 });
   try {
     const window = await app.firstWindow(); await window.waitForLoadState('domcontentloaded');
     window.setDefaultTimeout(15000);
     const errors = []; window.on('pageerror', e => errors.push(e.message));
     await window.getByRole('heading', { name: /I tuoi PDF/ }).waitFor();
-    console.log('Desktop assets loaded');
+    console.log(`Desktop assets loaded; startup to ready UI: ${Date.now() - launchStarted} ms`);
     assert.equal(await window.evaluate(() => typeof window.folio.open), 'function');
     assert.equal(await window.evaluate(() => typeof window.require), 'undefined');
     await app.evaluate(({ dialog }, { input, output }) => {
@@ -34,9 +35,15 @@ const assert = require('node:assert/strict');
     await window.locator('.toast').filter({ hasText: 'Copia salvata' }).waitFor();
     console.log('Native save passed');
     assert.equal((await PDFDocument.load(await fs.readFile(output))).getPageCount(), 1);
-    await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].webContents.print = (_options, callback) => callback(true); });
-    await window.getByRole('button', { name: 'Stampa', exact: true }).click();
+    await app.evaluate(({ BrowserWindow }) => {
+      const main = BrowserWindow.getAllWindows()[0];
+      main.folioTestPrintCalls = 0;
+      main.webContents.print = (_options, callback) => { main.folioTestPrintCalls++; callback(true); };
+    });
+    // At compact widths the visual label is hidden, but the print button remains.
+    await window.locator('button.print-button').click();
     await window.locator('.busy-overlay').waitFor({ state: 'hidden' });
+    assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].folioTestPrintCalls), 1);
     assert.equal(await window.getByRole('alert').count(), 0);
     assert.deepEqual(errors, []);
     await window.screenshot({ path: path.join(profile, 'native-desktop.png') });
