@@ -69,7 +69,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $tag = "v$version"
-          git diff --exit-code $tag -- src electron public scripts tests pnpm-lock.yaml
+          git diff --exit-code $tag -- src electron public scripts pnpm-lock.yaml
           if ($LASTEXITCODE -ne 0) { throw 'Application differs from release tag; create a new version first' }
           gh release view $tag --repo $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) { throw 'Matching release does not exist' }
