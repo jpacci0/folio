@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
 import { TextLayer } from 'pdfjs-dist';
 import type { RenderTask } from 'pdfjs-dist';
-import type { Mark, PageModel, Point, Source, Tool } from '../types';
+import type { Mark, PageModel, Point, Signature, Source, Tool } from '../types';
 import { normalizeRotation, rotationTransform, strokeMark, toBase, uid } from '../pdf-engine';
 
 export function MarkShape({ mark, width, height }: { mark: Mark; width: number; height: number }) {
   const x = mark.x * width, y = mark.y * height, w = mark.width * width, h = mark.height * height;
+  if (mark.kind === 'signature' && mark.imageDataUrl) return <image href={mark.imageDataUrl} x={x} y={y} width={w} height={h} />;
   if (mark.kind === 'highlight') return <rect x={x} y={y} width={w} height={h} fill={mark.color} opacity={0.32} />;
   if (mark.kind === 'text') return <text x={x} y={y} fill={mark.color} fontSize={mark.size} fontFamily="Inter, sans-serif">{(mark.text || '').split('\n').map((line, i) => <tspan key={i} x={x} dy={i === 0 ? mark.size : mark.size * 1.3}>{line || ' '}</tspan>)}</text>;
   return <g fill="none" stroke={mark.color} strokeWidth={mark.size} strokeLinecap="round" strokeLinejoin="round">{mark.paths?.map((path, i) => <polyline key={i} points={path.map(p => `${x + p.x * w},${y + p.y * h}`).join(' ')} />)}</g>;
@@ -14,7 +15,7 @@ export function MarkShape({ mark, width, height }: { mark: Mark; width: number; 
 
 type Props = {
   source: Source; page: PageModel; zoom: number; tool: Tool; color: string; size: number;
-  text: string; signature: Point[][]; selected: string | null;
+  text: string; signature: Signature | null; selected: string | null;
   onSelect: (id: string | null) => void; onAdd: (mark: Mark) => void;
   onMove: (id: string, x: number, y: number) => void; onError: (message: string) => void;
 };
@@ -78,9 +79,10 @@ export function PageView(props: Props) {
       if (width > 0.95 || height > 0.95) { onError('Il testo è troppo grande per la pagina: riduci la dimensione o inserisci delle righe.'); return; }
       onAdd({ id: uid(), kind: 'text', x: Math.min(p.x, 1 - width), y: Math.min(p.y, 1 - height), width, height, color, size, text: props.text }); return;
     } else if (tool === 'signature') {
-      if (!props.signature.length) { onError('Crea prima la firma nel pannello a destra.'); return; }
-      const width = 0.3, height = 0.3 * (baseWidth / baseHeight) * 0.36;
-      onAdd({ id: uid(), kind: 'signature', x: Math.min(p.x, 1 - width), y: Math.min(p.y, 1 - height), width, height, color, size: 1.6, paths: props.signature }); return;
+      if (!props.signature) { onError('Crea prima la firma nel pannello a destra.'); return; }
+      const ratio = (baseWidth / baseHeight) / props.signature.aspectRatio;
+      const width = Math.min(0.3, 0.9 / ratio), height = width * ratio;
+      onAdd({ id: uid(), kind: 'signature', x: Math.min(p.x, 1 - width), y: Math.min(p.y, 1 - height), width, height, color, size: 1.6, ...(props.signature.kind === 'image' ? { imageDataUrl: props.signature.dataUrl } : { paths: props.signature.paths }) }); return;
     } else { gesture.current = { start: p, points: [p], last: p }; }
     e.currentTarget.setPointerCapture(e.pointerId);
   };

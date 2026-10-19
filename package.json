@@ -1,9 +1,11 @@
 {
   "name": "folio-pdf",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "packageManager": "pnpm@11.25.0",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "description": "Un luogo semplice e curato per i tuoi PDF. Desktop, locale, senza account.",
   "author": "Jacopo",
   "type": "module",
@@ -17,13 +19,13 @@
     "desktop:dev": "node scripts/dev-desktop.mjs",
     "build": "tsc -b && vite build",
     "start": "electron .",
-    "test": "tsx --test tests/pdf.test.ts",
+    "test": "tsx --test tests/pdf.test.ts tests/signature.test.ts",
     "pretest:ui": "node scripts/prepare-assets.mjs",
     "test:ui": "playwright test",
     "test:desktop": "node tests/desktop.cjs",
     "pack": "npm run build && node scripts/package-portable.mjs",
-    "pack:exe": "electron-builder --prepackaged release/Folio-Windows --win portable --x64",
-    "pack:installer": "electron-builder --prepackaged release/Folio-Windows --win nsis --x64"
+    "pack:exe": "electron-builder --prepackaged release/JFolio-Windows --win portable --x64",
+    "pack:installer": "electron-builder --prepackaged release/JFolio-Windows --win nsis --x64"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
@@ -48,21 +50,36 @@
   },
   "build": {
     "appId": "it.folio.pdf",
-    "productName": "Folio",
-    "directories": { "output": "release" },
-    "files": ["dist/**/*", "electron/**/*", "package.json"],
-    "win": { "target": "portable", "signAndEditExecutable": false },
-    "portable": { "artifactName": "Folio-${version}-Windows.exe" },
+    "productName": "JFolio",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable",
+      "signExecutable": false,
+      "icon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "JFolio-${version}-Windows.exe"
+    },
     "nsis": {
-      "artifactName": "Folio-${version}-Setup-x64.exe",
+      "artifactName": "JFolio-${version}-Setup-x64.exe",
       "oneClick": false,
       "perMachine": false,
       "allowElevation": false,
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Folio",
-      "installerLanguages": ["it_IT", "en_US"],
+      "shortcutName": "JFolio",
+      "installerLanguages": [
+        "it_IT",
+        "en_US"
+      ],
       "language": "1040",
       "deleteAppDataOnUninstall": false,
       "packElevateHelper": false

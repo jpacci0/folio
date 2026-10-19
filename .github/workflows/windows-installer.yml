@@ -1,21 +1,21 @@
-name: Windows installer
+name: JFolio Windows release
 
 on:
   workflow_dispatch:
   push:
-    branches: [codex/windows-installer]
+    branches: [codex/jfolio-signatures]
 
 permissions:
   contents: write
 
 concurrency:
-  group: windows-installer-${{ github.ref }}
+  group: jfolio-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  installer:
+  release:
     runs-on: windows-2022
-    timeout-minutes: 20
+    timeout-minutes: 25
     defaults:
       run:
         shell: pwsh
@@ -31,47 +31,73 @@ jobs:
           node-version: '24'
       - name: Install locked dependencies
         run: npx --yes pnpm@11.25.0 install --frozen-lockfile
-      - name: Test PDF engine
+      - name: Test PDF engine and signature persistence
         run: npx pnpm@11.25.0 test
-      - name: Build Windows app
-        run: npx pnpm@11.25.0 run pack
-      - name: Build installer
-        run: npx pnpm@11.25.0 pack:installer --publish never
-      - name: Verify installed application
+      - name: Install test browser
+        run: npx pnpm@11.25.0 exec playwright install chromium
+      - name: Test editor, signatures and window layout
+        run: npx pnpm@11.25.0 test:ui
+      - name: Build Windows app and verify icon
+        run: |
+          npx pnpm@11.25.0 run pack
+          if ($LASTEXITCODE -ne 0) { throw 'App build failed' }
+          node scripts/verify-windows-brand.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Windows branding check failed' }
+      - name: Build installer and portable
+        run: |
+          npx pnpm@11.25.0 pack:installer --publish never
+          if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
+          npx pnpm@11.25.0 pack:exe --publish never
+          if ($LASTEXITCODE -ne 0) { throw 'Portable build failed' }
+      - name: Verify installed application and full restarts
         run: |
           $ErrorActionPreference = 'Stop'
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $setup = Join-Path $PWD "release/Folio-$version-Setup-x64.exe"
+          $setup = Join-Path $PWD "release/JFolio-$version-Setup-x64.exe"
           if ((Get-Item -LiteralPath $setup).Length -lt 10000000) { throw 'Installer unexpectedly small' }
-          $installed = Join-Path $env:RUNNER_TEMP 'folio-installer-verification'
+          $installed = Join-Path $env:RUNNER_TEMP 'jfolio-installer-verification'
           if (Test-Path -LiteralPath $installed) { throw 'Verification directory already exists' }
           $process = Start-Process -FilePath $setup -ArgumentList "/S /currentuser /D=$installed" -WindowStyle Hidden -PassThru
           if (-not $process.WaitForExit(120000)) { throw 'Installer timed out' }
           if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
-          $env:FOLIO_TEST_EXECUTABLE = Join-Path $installed 'Folio.exe'
-          if (-not (Test-Path -LiteralPath $env:FOLIO_TEST_EXECUTABLE)) { throw 'Installed executable missing' }
+          $env:FOLIO_TEST_EXECUTABLE = Join-Path $installed 'JFolio.exe'
+          node scripts/verify-windows-brand.cjs "$env:FOLIO_TEST_EXECUTABLE"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed branding check failed' }
           npx pnpm@11.25.0 test:desktop
           if ($LASTEXITCODE -ne 0) { throw 'Installed app smoke test failed' }
-          $hash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $(Split-Path -Leaf $setup)" | Set-Content -LiteralPath "$setup.sha256" -Encoding ascii
+          node tests/signature-desktop.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Signature restart test failed' }
+          foreach ($file in @($setup, (Join-Path $PWD "release/JFolio-$version-Windows.exe"))) {
+            if ((Get-Item -LiteralPath $file).Length -lt 10000000) { throw 'Package unexpectedly small' }
+            $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $(Split-Path -Leaf $file)" | Set-Content -LiteralPath "$file.sha256" -Encoding ascii
+          }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: JFolio-verification
+          path: |
+            test-results
+            playwright-report
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: Folio-Windows-installer
+          name: JFolio-Windows
           path: |
-            release/*-Setup-x64.exe
-            release/*-Setup-x64.exe.sha256
+            release/JFolio-*.exe
+            release/JFolio-*.exe.sha256
           if-no-files-found: error
           compression-level: 0
-      - name: Attach installer to matching existing release
+      - name: Publish verified release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $tag = "v$version"
-          git diff --exit-code $tag -- src electron public scripts pnpm-lock.yaml
-          if ($LASTEXITCODE -ne 0) { throw 'Application differs from release tag; create a new version first' }
-          gh release view $tag --repo $env:GITHUB_REPOSITORY
-          if ($LASTEXITCODE -ne 0) { throw 'Matching release does not exist' }
-          gh release upload $tag "release/Folio-$version-Setup-x64.exe" "release/Folio-$version-Setup-x64.exe.sha256" --repo $env:GITHUB_REPOSITORY
-          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed; existing assets are never overwritten' }
+          $notes = "docs/release-$version.md"
+          if (-not (Test-Path -LiteralPath $notes)) { throw 'Release notes missing' }
+          gh release create $tag "release/JFolio-$version-Setup-x64.exe" "release/JFolio-$version-Setup-x64.exe.sha256" "release/JFolio-$version-Windows.exe" "release/JFolio-$version-Windows.exe.sha256" --draft --target $env:GITHUB_SHA --title "JFolio $version" --notes-file $notes --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Release creation failed; existing releases are never overwritten' }
+          gh release edit $tag --draft=false --latest --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Release remains a draft; publication failed' }

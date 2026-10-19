@@ -6,8 +6,9 @@ import { createWelcomePdf, exportPdf, MAX_FILE_SIZE, uid } from './pdf-engine';
 import { loadSource, pdfjs } from './pdf-loader';
 import { useHistory } from './useHistory';
 import { PageView, Thumbnail } from './components/PageView';
-import SignatureDialog from './components/SignatureDialog';
-import type { Mark, PageModel, Point, Source, Tool } from './types';
+import SignatureDialog, { SignaturePreview } from './components/SignatureDialog';
+import { loadSignature, saveSignature } from './signature';
+import type { Mark, PageModel, Signature, Source, Tool } from './types';
 
 const toolItems: { id: Tool; label: string; icon: LucideIcon; hint: string }[] = [
   { id: 'select', label: 'Seleziona', icon: MousePointer2, hint: 'Seleziona il testo del PDF o trascina una tua annotazione.' },
@@ -36,7 +37,9 @@ export default function App() {
   const [text, setText] = useState('');
   const [zoom, setZoom] = useState(0.85);
   const [selected, setSelected] = useState<string | null>(null);
-  const [signature, setSignature] = useState<Point[][]>([]);
+  const [signature, setSignature] = useState<Signature | null>(null);
+  const [signatureReady, setSignatureReady] = useState(false);
+  const [signatureSaving, setSignatureSaving] = useState(false);
   const [signatureDialog, setSignatureDialog] = useState(false);
   const [busy, setBusy] = useState('');
   const busyRef = useRef(false);
@@ -56,6 +59,17 @@ export default function App() {
   const activeMark = page?.marks.find(m => m.id === selected);
   const dirty = JSON.stringify(pages) !== savedState;
   const showError = useCallback((message: string) => setNotice({ text: message, error: true }), []);
+  useEffect(() => {
+    let canceled = false;
+    loadSignature().then(value => { if (!canceled) setSignature(value); }).catch(() => { if (!canceled) showError('Non riesco a leggere la firma salvata. Puoi crearne una nuova.'); }).finally(() => { if (!canceled) setSignatureReady(true); });
+    return () => { canceled = true; };
+  }, [showError]);
+  const forgetSignature = async () => {
+    setSignatureSaving(true);
+    try { await saveSignature(null); setSignature(null); setNotice({ text: 'Firma salvata eliminata. Le firme già inserite nel PDF restano al loro posto.', error: false }); }
+    catch (error) { showError(errorText(error)); }
+    finally { setSignatureSaving(false); }
+  };
   const notify = (message: string) => setNotice({ text: message, error: false });
   useEffect(() => { if (!notice || notice.error) return; const id = setTimeout(() => setNotice(null), 4500); return () => clearTimeout(id); }, [notice]);
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
@@ -101,7 +115,7 @@ export default function App() {
     if (file.size > MAX_FILE_SIZE) throw new Error('Il limite per ogni PDF è 150 MB.');
     await openBytes(file.name, new Uint8Array(await file.arrayBuffer()), append);
   });
-  const demo = () => run('Preparazione documento…', async () => openBytes('Benvenuto in Folio.pdf', await createWelcomePdf(), false));
+  const demo = () => run('Preparazione documento…', async () => openBytes('Benvenuto in JFolio.pdf', await createWelcomePdf(), false));
   const editPage = (fn: (p: PageModel) => PageModel) => commit(previous => previous.map(p => p.id === page.id ? fn(p) : p));
   const addMark = (mark: Mark) => { editPage(p => ({ ...p, marks: [...p.marks, mark] })); setSelected(mark.id); setTool('select'); };
   const updateMark = (updates: Partial<Mark>) => {
@@ -217,10 +231,10 @@ export default function App() {
   const enabled = pages.length > 0 && !readOnly;
   const currentTool = toolItems.find(t => t.id === tool)!;
   const totalMarks = pages.reduce((count, p) => count + p.marks.length, 0);
-  return <div className={`app ${dragOver ? 'drag-over' : ''}`} onDragOver={e => { e.preventDefault(); if (e.dataTransfer.types.includes('Files')) setDragOver(true); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }} onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length > 1) { showError('Apri un PDF alla volta. Per unirne altri usa “Aggiungi PDF”.'); return; } const file = e.dataTransfer.files[0]; if (file) void localFile(file, false); }}>
+  return <div className={`app ${dragOver ? 'drag-over' : ''}`} onDragOver={e => { e.preventDefault(); if (signatureDialog) return; if (e.dataTransfer.types.includes('Files')) setDragOver(true); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }} onDrop={e => { e.preventDefault(); setDragOver(false); if (signatureDialog) return; if (e.dataTransfer.files.length > 1) { showError('Apri un PDF alla volta. Per unirne altri usa “Aggiungi PDF”.'); return; } const file = e.dataTransfer.files[0]; if (file) void localFile(file, false); }}>
     <input ref={input} hidden type="file" accept="application/pdf,.pdf" onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void localFile(file, appendMode.current); }} />
     <header className="app-header">
-      <div className="brand"><span className="brand-icon"><Layers size={23} strokeWidth={2.3} /></span><strong>folio<span>.</span></strong><span className="beta">PREVIEW</span></div>
+      <div className="brand"><img className="brand-logo" src="./favicon.svg" alt="" /><strong>JFolio<span>.</span></strong><span className="beta">PREVIEW</span></div>
       <div className="header-center"><span className="status-dot" />Il tuo spazio, in locale</div>
       <div className="header-actions"><IconButton label={theme === 'light' ? 'Tema scuro' : 'Tema chiaro'} onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</IconButton><span className="header-divider" /><span className="local-badge"><LockKeyhole size={14} />Solo sul tuo PC</span></div>
     </header>
@@ -235,8 +249,8 @@ export default function App() {
         <div className="privacy-card"><ShieldCheck size={20} /><div><strong>Un po’ più tuo.</strong><p>Nessun upload.<br />Nessun account richiesto.</p></div></div>
       </aside>
       <main className="main">
-        <div className="document-header"><div className="document-title"><span className="file-icon"><FileText size={20} /></span><div><h1 title={fileName}>{fileName || 'Il tuo prossimo documento'}</h1><p>{pages.length ? `${pages.length} pagine · ${readOnly ? 'Sola lettura' : dirty ? 'Modifiche non salvate' : 'Pronto per lavorare'}` : 'Un posto semplice per fare di più con i tuoi PDF.'}</p></div>{dirty && <i className="unsaved-dot" title="Modifiche non salvate" />}</div><div className="document-actions"><button className="button print-button" disabled={!pages.length} onClick={() => void print()}><Printer size={16} /><span>Stampa</span></button><button className="button primary" disabled={!enabled} onClick={() => void save()}><Download size={16} />Salva copia</button></div></div>
-        <div className="toolbar"><div className="tool-list">{toolItems.map(item => <button key={item.id} className={`tool-button ${tool === item.id ? 'active' : ''}`} disabled={!pages.length || (!!readOnly && item.id !== 'select')} onClick={() => changeTool(item.id)} title={item.hint}><item.icon size={17} /><span>{item.label}</span></button>)}</div><div className="history-buttons"><IconButton label="Annulla (Ctrl Z)" onClick={() => { history.undo(); setSelected(null); }} disabled={!history.canUndo}><Undo2 size={17} /></IconButton><IconButton label="Ripristina (Ctrl Shift Z)" onClick={() => { history.redo(); setSelected(null); }} disabled={!history.canRedo}><Redo2 size={17} /></IconButton></div></div>
+        <div className="document-header"><div className="document-title"><span className="file-icon"><FileText size={20} /></span><div><h1 title={fileName}>{fileName || 'Il tuo prossimo documento'}</h1><p>{pages.length ? `${pages.length} pagine · ${readOnly ? 'Sola lettura' : dirty ? 'Modifiche non salvate' : 'Pronto per lavorare'}` : 'Un posto semplice per fare di più con i tuoi PDF.'}</p></div>{dirty && <i className="unsaved-dot" title="Modifiche non salvate" />}</div><div className="document-actions"><button aria-label="Stampa" className="button print-button" disabled={!pages.length} onClick={() => void print()}><Printer size={16} /><span>Stampa</span></button><button className="button primary" disabled={!enabled} onClick={() => void save()}><Download size={16} />Salva copia</button></div></div>
+        <div className="toolbar"><div className="tool-list">{toolItems.map(item => <button key={item.id} aria-label={item.label} className={`tool-button ${tool === item.id ? 'active' : ''}`} disabled={!pages.length || (!!readOnly && item.id !== 'select')} onClick={() => changeTool(item.id)} title={item.hint}><item.icon size={17} /><span>{item.label}</span></button>)}</div><div className="history-buttons"><IconButton label="Annulla (Ctrl Z)" onClick={() => { history.undo(); setSelected(null); }} disabled={!history.canUndo}><Undo2 size={17} /></IconButton><IconButton label="Ripristina (Ctrl Shift Z)" onClick={() => { history.redo(); setSelected(null); }} disabled={!history.canRedo}><Redo2 size={17} /></IconButton></div></div>
         {readOnly && <div className="readonly-banner"><LockKeyhole size={16} />{readOnly}</div>}
         <div className="workspace" ref={workspace} onClick={e => { if (e.target === e.currentTarget) setSelected(null); }}>
           {page && source ? <div className="page-wrap"><PageView source={source} page={page} zoom={zoom} tool={tool} color={color} size={tool === 'draw' ? strokeSize : fontSize} text={text} signature={signature} selected={selected} onSelect={setSelected} onAdd={addMark} onMove={(id, x, y) => editPage(p => ({ ...p, marks: p.marks.map(m => m.id === id ? { ...m, x, y } : m) }))} onError={showError} /><div className="page-caption">{activeIndex + 1} / {pages.length}</div></div> : <div className="welcome">
@@ -253,11 +267,11 @@ export default function App() {
       <aside className="inspector"><div className="inspector-heading"><span>IL TUO KIT CREATIVO</span><span className="tiny-dot" /></div>
         {!pages.length ? <><div className="inspector-intro"><span className="sparkle-box"><PenTool size={24} /></span><h3>Piccoli strumenti.<br />Grandi possibilità.</h3><p>Tutto quello che serve, esattamente dove lo cerchi.</p></div><div className="kit-features">{[{ icon: Type, title: 'Una parola in più', description: 'Aggiungi testo e appunti.' }, { icon: Highlighter, title: 'Quello che conta', description: 'Metti in luce i passaggi chiave.' }, { icon: PenTool, title: 'Il tuo tratto', description: 'Disegna e aggiungi una firma.' }, { icon: Layers, title: 'Il giusto ordine', description: 'Unisci e organizza le pagine.' }].map(item => <div key={item.title}><item.icon size={18} /><section><strong>{item.title}</strong><p>{item.description}</p></section></div>)}</div><div className="inspector-note"><span>LO SAPEVI?</span><p>Puoi lavorare offline.<br />Le tue idee non hanno bisogno<br />di una connessione.</p></div></> : <>
           <div className="tool-settings"><h3>{activeMark ? markNames[activeMark.kind] : currentTool.label}</h3><p>{activeMark ? 'Trascina l’elemento sulla pagina per spostarlo.' : currentTool.hint}</p>
-            {!readOnly && (tool !== 'select' || activeMark) && <><label>Colore</label><div className="color-swatches">{colors.map(c => <button key={c} aria-label={`Colore ${c}`} className={(activeMark?.color || color) === c ? 'selected' : ''} style={{ backgroundColor: c }} onClick={() => { setColor(c); if (activeMark) updateMark({ color: c }); }}>{(activeMark?.color || color) === c && <Check size={13} />}</button>)}</div>
+            {!readOnly && (tool !== 'select' || activeMark) && <>{!(activeMark?.imageDataUrl || (tool === 'signature' && signature?.kind === 'image')) && <><label>Colore</label><div className="color-swatches">{colors.map(c => <button key={c} aria-label={`Colore ${c}`} className={(activeMark?.color || color) === c ? 'selected' : ''} style={{ backgroundColor: c }} onClick={() => { setColor(c); if (activeMark) updateMark({ color: c }); }}>{(activeMark?.color || color) === c && <Check size={13} />}</button>)}</div></>}
               {(tool === 'text' || activeMark?.kind === 'text') && <><label htmlFor="annotation-text">Il tuo testo</label>{activeMark ? <textarea id="annotation-text" key={activeMark.id + '-edit'} defaultValue={activeMark.text} maxLength={2000} onBlur={e => { const value = e.target.value; if (value !== activeMark.text) updateMark({ text: value }); }} /> : <textarea id="annotation-text" placeholder="Scrivi qualcosa…" value={text} onChange={e => setText(e.target.value)} maxLength={2000} />}<label htmlFor="font-size">Dimensione testo</label><select id="font-size" value={activeMark?.size || fontSize} onChange={e => { const value = Number(e.target.value); setFontSize(value); if (activeMark) updateMark({ size: value }); }}>{[10, 12, 14, 16, 18, 20, 24, 32, 40].map(size => <option key={size} value={size}>{size} pt</option>)}</select></>}
               {tool === 'draw' && <><label htmlFor="stroke-size">Spessore · {strokeSize} pt</label><input id="stroke-size" type="range" min="1" max="8" step="0.5" value={strokeSize} onChange={e => setStrokeSize(Number(e.target.value))} /></>}
-              {(tool === 'signature' || activeMark?.kind === 'signature') && <><button className="button signature-button" onClick={() => setSignatureDialog(true)}><PenTool size={16} />{signature.length ? 'Ridisegna firma' : 'Crea la tua firma'}</button>{signature.length > 0 && <svg className="signature-preview" viewBox="0 0 250 90">{signature.map((path, i) => <polyline key={i} points={path.map(p => `${p.x * 250},${p.y * 90}`).join(' ')} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" />)}</svg>}<div className="small-note">Firma grafica, senza certificato digitale.</div></>}
-              {activeMark && activeMark.kind !== 'text' && <><label htmlFor="mark-width">Larghezza · {Math.round(activeMark.width * 100)}%</label><input id="mark-width" type="range" min="5" max="75" step="1" value={Math.round(activeMark.width * 100)} onChange={e => { const width = Number(e.target.value) / 100; const height = Math.min(.9, activeMark.height * width / activeMark.width); updateMark({ width, height, x: Math.min(activeMark.x, 1 - width), y: Math.min(activeMark.y, 1 - height) }); }} /></>}
+              {(tool === 'signature' || activeMark?.kind === 'signature') && <><button className="button signature-button" disabled={!signatureReady || signatureSaving} onClick={() => setSignatureDialog(true)}><PenTool size={16} />{!signatureReady ? 'Caricamento firma…' : signature ? 'Cambia firma' : 'Crea la tua firma'}</button>{signature && <><SignaturePreview signature={signature} color={color} /><div className="small-note">Salvata sul dispositivo. Fai clic sulla pagina per inserirla.</div><button className="text-button forget-signature" disabled={signatureSaving} onClick={() => void forgetSignature()}><Trash2 size={14} />Elimina firma salvata</button></>}<div className="small-note">Firma grafica, senza certificato digitale.</div></>}
+              {activeMark && activeMark.kind !== 'text' && <><label htmlFor="mark-width">Larghezza · {Math.round(activeMark.width * 100)}%</label><input id="mark-width" type="range" min="5" max="75" step="1" value={Math.round(activeMark.width * 100)} onChange={e => { const width = Math.min(Number(e.target.value) / 100, .9 * activeMark.width / activeMark.height); const height = activeMark.height * width / activeMark.width; updateMark({ width, height, x: Math.min(activeMark.x, 1 - width), y: Math.min(activeMark.y, 1 - height) }); }} /></>}
               {activeMark && <button className="button danger-light" onClick={removeMark}><Trash2 size={15} />Rimuovi annotazione</button>}
             </>}
           </div>
@@ -270,6 +284,6 @@ export default function App() {
     {notice && <div className={`toast ${notice.error ? 'error' : ''}`} role={notice.error ? 'alert' : 'status'}><span>{notice.error ? '!' : <Check size={17} />}</span><p>{notice.text}</p><button onClick={() => setNotice(null)} aria-label="Chiudi messaggio"><X size={16} /></button></div>}
     {busy && <div className="busy-overlay" role="status" aria-live="polite"><div className="busy-card"><span className="spinner" />{busy}</div></div>}
     {dragOver && <div className="drop-overlay"><Upload size={40} /><h2>Un nuovo spazio per il tuo PDF.</h2><p>Rilascia il documento qui per aprirlo.</p></div>}
-    {signatureDialog && <SignatureDialog onClose={() => setSignatureDialog(false)} onSave={paths => { setSignature(paths); setSignatureDialog(false); setTool('signature'); setSelected(null); notify('Firma pronta. Fai clic sulla pagina per inserirla.'); }} />}
+    {signatureDialog && <SignatureDialog onClose={() => setSignatureDialog(false)} onSave={async value => { await saveSignature(value); setSignature(value); setSignatureDialog(false); setTool('signature'); setSelected(null); notify('Firma salvata sul dispositivo. Fai clic sulla pagina per inserirla.'); }} />}
   </div>;
 }

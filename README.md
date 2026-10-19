@@ -1,14 +1,14 @@
-# Folio PDF
+# JFolio PDF
 
-Un'app desktop per Windows, con interfaccia in italiano, per leggere, annotare, firmare graficamente e organizzare PDF. Versione 0.1.0: una base funzionante da sviluppare, non una sostituzione completa di Acrobat Pro.
+Un'app desktop per Windows, con interfaccia in italiano, per leggere, annotare, firmare graficamente e organizzare PDF. Versione 0.2.0: una base funzionante da sviluppare, non una sostituzione completa di Acrobat Pro.
 
 ## Per provarla
 
 La distribuzione Windows si trova in `release`. L'app compilata non richiede Node.js, WSL, account o server. La prima schermata contiene **Prova un documento**, un PDF di esempio generato in memoria.
 
-Per l'uso quotidiano scegli **`Folio-0.1.0-Setup-x64.exe`**: installa Folio per il tuo utente Windows, crea i collegamenti sul Desktop e nel menu Start e include la disinstallazione da Impostazioni > App. Dopo l'installazione avvia Folio dal collegamento, non rilanciare il setup. I file vengono estratti solo durante l'installazione.
+Per l'uso quotidiano scegli **`JFolio-0.2.0-Setup-x64.exe`**: installa JFolio per il tuo utente Windows, crea i collegamenti sul Desktop e nel menu Start e include la disinstallazione da Impostazioni > App. Dopo l'installazione avvia JFolio dal collegamento, non rilanciare il setup. I file vengono estratti solo durante l'installazione.
 
-**`Folio-0.1.0-Windows.exe`** resta la versione portable a file singolo: non richiede installazione ma estrae il runtime a ogni avvio, che può quindi impiegare più tempo. Entrambe le versioni sono per Windows x64 e non hanno ancora una firma con certificato di code signing.
+**`JFolio-0.2.0-Windows.exe`** resta la versione portable a file singolo: non richiede installazione ma estrae il runtime a ogni avvio, che può quindi impiegare più tempo. Entrambe le versioni sono per Windows x64 e non hanno ancora una firma con certificato di code signing.
 
 Per sviluppare nella cartella richiesta, estrai la cartella `folio` dall'archivio dei sorgenti in `Documenti\progetti`. Il codice non dipende dal percorso di questa sessione.
 
@@ -19,7 +19,7 @@ Per sviluppare nella cartella richiesta, estrai la cartella `folio` dall'archivi
 - Ricerca nel testo del documento e nelle annotazioni testuali aggiunte.
 - Testo aggiunto con dimensione e colore, modificabile fino all'esportazione.
 - Evidenziazioni rettangolari e disegno a mano libera.
-- Firma disegnata con mouse, penna o touch; inserimento, spostamento e ridimensionamento.
+- Firma disegnata con mouse, penna o touch oppure importata da PNG/JPG; salvataggio locale, inserimento, spostamento e ridimensionamento.
 - Selezione, spostamento e rimozione delle annotazioni.
 - Rotazione, duplicazione, riordino e rimozione pagine; aggiunta di un altro PDF.
 - Annulla e ripristina, fino a 40 revisioni della sessione.
@@ -28,13 +28,13 @@ Per sviluppare nella cartella richiesta, estrai la cartella `folio` dall'archivi
 - Tema chiaro/scuro, scorciatoie, indicatore modifiche e avviso prima della chiusura.
 - PDF con moduli o campi firma: apertura e stampa in sola lettura.
 
-Le annotazioni esportate vengono incorporate nella pagina; alla riapertura sono parte del PDF e non oggetti Folio separatamente modificabili. La firma disegnata è tenuta solo in memoria e viene eliminata alla chiusura dell'app.
+Le annotazioni esportate vengono incorporate nella pagina; alla riapertura sono parte del PDF e non oggetti JFolio separatamente modificabili. La firma viene conservata sul dispositivo tra le aperture. Puoi sostituirla o eliminarla dal pannello Firma. In Windows il file è in `%APPDATA%/folio-pdf/signature-v1.json`, condiviso tra installer e portable; nel browser viene usato localStorage. Non viene sincronizzata su GitHub o su altri PC.
 
 ## Limiti della versione iniziale
 
 - **Non sostituisce il testo già esistente** nel PDF. Inserisce nuovo testo; non simula modifiche nascondendo informazioni con rettangoli bianchi.
 - **Non applica e non verifica firme digitali con certificati**. La firma grafica non equivale a una firma PAdES o a una firma qualificata.
-- Non include OCR, redazione sicura, conversione Word, compressione avanzata, firme da immagini, compilazione moduli o collaborazione.
+- Non include OCR, redazione sicura, conversione Word, compressione avanzata, compilazione moduli o collaborazione.
 - I PDF con password non sono supportati. Non viene tentata la rimozione delle protezioni.
 - Il controllo dei campi firma serve a limitare modifiche accidentali, non è una validazione crittografica.
 - L'esportazione ricompone le pagine: allegati, segnalibri, struttura di accessibilità e metadati a livello di documento non sono preservati. Conserva sempre il file originale.
@@ -80,7 +80,7 @@ tests/            Test del motore, browser e desktop
 
 Le annotazioni sono memorizzate in coordinate normalizzate rispetto alla pagina originale visibile. Rotazione della vista e conversione nelle coordinate PDF sono separate; questo evita spostamenti delle firme su pagine ruotate o con CropBox non nullo.
 
-Il processo Electron espone solo `open`, `save`, `print` e `dirty`. I messaggi IPC verificano finestra e frame di provenienza. I percorsi di apertura/salvataggio vengono scelti nei dialoghi nativi, non passati liberamente dal renderer. Navigazioni esterne, nuove finestre e richieste di permesso vengono rifiutate. Nessun contenuto dei PDF viene caricato su servizi esterni. In produzione non vengono eseguiti JavaScript o collegamenti incorporati nei PDF.
+Il processo Electron espone `open`, `save`, `print`, `dirty`, `loadSignature` e `saveSignature`. I messaggi IPC verificano finestra e frame di provenienza. I percorsi di apertura/salvataggio vengono scelti nei dialoghi nativi, non passati liberamente dal renderer. Navigazioni esterne, nuove finestre e richieste di permesso vengono rifiutate. Nessun contenuto dei PDF viene caricato su servizi esterni. In produzione non vengono eseguiti JavaScript o collegamenti incorporati nei PDF.
 
 ## Sviluppo
 
@@ -107,9 +107,9 @@ npx pnpm@11.25.0 build
 npx pnpm@11.25.0 start
 ```
 
-Per la cartella Windows portatile: `npx pnpm@11.25.0 run pack`. Usa esplicitamente `run`: `pnpm pack` è un comando di pnpm che crea un archivio npm dei sorgenti. Il risultato dello script è `release/Folio-Windows`: avvia `Folio.exe` e conserva accanto tutti gli altri file della cartella. Non richiede ulteriori strumenti di packaging. Per creare anche l'eseguibile autoestraente: `npx pnpm@11.25.0 pack:exe`; questo passaggio può scaricare gli strumenti NSIS. L'app già compilata funziona offline.
+Per la cartella Windows portatile: `npx pnpm@11.25.0 run pack`. Usa esplicitamente `run`: `pnpm pack` è un comando di pnpm che crea un archivio npm dei sorgenti. Il risultato dello script è `release/JFolio-Windows`: avvia `JFolio.exe` e conserva accanto tutti gli altri file della cartella. Non richiede ulteriori strumenti di packaging. Per creare anche l'eseguibile autoestraente: `npx pnpm@11.25.0 pack:exe`; questo passaggio può scaricare gli strumenti NSIS. L'app già compilata funziona offline.
 
-Per generare l'installer Windows, dopo `pack` esegui `npx pnpm@11.25.0 pack:installer`. Il risultato è `release/Folio-0.1.0-Setup-x64.exe`. La procedura guidata è disponibile in italiano e inglese. La disinstallazione conserva le preferenze dell'app. Pubblica il setup come allegato della Release GitHub, insieme all'eventuale portable; gli eseguibili restano esclusi dalla cronologia Git.
+Per generare l'installer Windows, dopo `pack` esegui `npx pnpm@11.25.0 pack:installer`. Il risultato è `release/JFolio-0.2.0-Setup-x64.exe`. La procedura guidata è disponibile in italiano e inglese. La disinstallazione conserva le preferenze dell'app. Pubblica il setup come allegato della Release GitHub, insieme all'eventuale portable; gli eseguibili restano esclusi dalla cronologia Git.
 
 ## Verifica
 

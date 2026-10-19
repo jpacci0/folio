@@ -13,3 +13,7 @@
 *.png binary
 *.zip binary
 *.exe binary
+
+*.yml text eol=lf
+*.ico binary
+*.png binary

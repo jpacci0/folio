@@ -36,6 +36,7 @@ export async function exportPdf(pages: PageModel[], sources: Map<string, Source>
   const output = await PDFDocument.create();
   output.registerFontkit(fontkit);
   const font = fontBytes ? await output.embedFont(fontBytes, { subset: true }) : await output.embedFont(StandardFonts.Helvetica);
+  const images = new Map<string, Awaited<ReturnType<typeof output.embedPng>>>();
   const loaded = new Map<string, PDFDocument>();
   for (const model of pages) {
     const source = sources.get(model.sourceId);
@@ -60,6 +61,10 @@ export async function exportPdf(pages: PageModel[], sources: Map<string, Source>
       } else if (mark.kind === 'highlight') {
         const a = pdfPoint(mark.x, mark.y), b = pdfPoint(mark.x + mark.width, mark.y + mark.height);
         page.drawRectangle({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(a.x - b.x), height: Math.abs(a.y - b.y), color: color(mark.color), opacity: 0.32 });
+      } else if (mark.kind === 'signature' && mark.imageDataUrl) {
+        let image = images.get(mark.imageDataUrl);
+        if (!image) { image = await output.embedPng(mark.imageDataUrl); images.set(mark.imageDataUrl, image); }
+        page.drawImage(image, { ...pdfPoint(mark.x, mark.y + mark.height), width: mark.width * w, height: mark.height * h, rotate: degrees(viewport.rotation) });
       } else {
         for (const path of mark.paths || []) {
           for (let i = 1; i < path.length; i++) {
@@ -70,7 +75,7 @@ export async function exportPdf(pages: PageModel[], sources: Map<string, Source>
     }
     page.setRotation(degrees(normalizeRotation(viewport.rotation + model.rotation)));
   }
-  output.setCreator('Folio PDF'); output.setProducer('Folio • pdf-lib');
+  output.setCreator('JFolio PDF'); output.setProducer('JFolio • pdf-lib');
   return output.save();
 }
 
@@ -82,12 +87,12 @@ export async function createWelcomePdf() {
   for (let index = 0; index < 2; index++) {
     const page = pdf.addPage([595.28, 841.89]);
     page.drawRectangle({ x: 0, y: 828, width: 595.28, height: 14, color: purple });
-    page.drawText('folio /', { x: 52, y: 770, size: 22, font: bold, color: purple });
+    page.drawText('JFolio /', { x: 52, y: 770, size: 22, font: bold, color: purple });
     page.drawText('IL TUO SPAZIO PDF', { x: 52, y: 717, size: 9, font: bold, color: gray });
     page.drawText(index === 0 ? 'Meno distrazioni.' : 'Fai spazio alle idee.', { x: 52, y: 667, size: 34, font: bold, color: dark });
     page.drawText(index === 0 ? 'Più spazio alle idee.' : 'Una pagina alla volta.', { x: 52, y: 622, size: 34, font: bold, color: dark });
     const lines = index === 0 ? [
-      'Benvenuto in Folio, il tuo nuovo spazio per leggere,',
+      'Benvenuto in JFolio, il tuo nuovo spazio per leggere,',
       'annotare e firmare i documenti. Tutto sul tuo dispositivo.',
       '',
       'Questo PDF è una piccola palestra: puoi modificarlo',
