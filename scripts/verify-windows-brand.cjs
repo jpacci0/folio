@@ -1,0 +1,13 @@
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const { createRequire } = require('node:module');
+const builderRequire = createRequire(require.resolve('electron-builder/package.json'));
+const appRequire = createRequire(builderRequire.resolve('app-builder-lib/package.json'));
+const { NtExecutable, NtExecutableResource, Resource } = appRequire('resedit');
+const executable = process.argv[2] || 'release/JFolio-Windows/JFolio.exe';
+const resources = NtExecutableResource.from(NtExecutable.from(fs.readFileSync(executable)));
+const version = Resource.VersionInfo.fromEntries(resources.entries)[0];
+assert.ok(version.getAllLanguagesForStringValues().some(lang => version.getStringValues(lang).ProductName === 'JFolio'));
+const icon = fs.readFileSync('public/jfolio-icon.png');
+assert.ok(resources.entries.some(e => e.type === 3 && Buffer.from(e.bin).includes(icon)), '256px JFolio icon is embedded in the Windows executable');
+console.log('PASS: executable product name and embedded JFolio icon.');

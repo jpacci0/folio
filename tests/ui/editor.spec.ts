@@ -57,7 +57,7 @@ test('Search, page management, original protection and invalid files', async ({ 
   page.on('dialog', d => d.accept());
   await page.locator('input[type=file]').setInputFiles({ name: 'rotto.pdf', mimeType: 'application/pdf', buffer: Buffer.from('not a PDF') });
   await expect(page.getByRole('alert')).toContainText('non sembra essere un PDF');
-  await expect(page.getByRole('heading', { name: 'Benvenuto in Folio.pdf' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Benvenuto in JFolio.pdf' })).toBeVisible();
 });
 
 test('Forms are read only; print prepares only document pages', async ({ page }) => {

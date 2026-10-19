@@ -7,7 +7,10 @@ let dirty = false;
 const MAX_SIZE = 150 * 1024 * 1024;
 const dev = !app.isPackaged && process.argv.includes('--dev');
 const testing = process.argv.includes('--test');
-if (testing) app.setPath('userData', path.join(app.getPath('temp'), 'folio-tests', String(process.pid)));
+// Keep the data directory stable across renames, upgrades and portable extraction.
+app.setPath('userData', path.join(app.getPath('appData'), 'folio-pdf'));
+if (testing) app.setPath('userData', path.join(app.getPath('temp'), 'folio-tests', (process.env.JFOLIO_TEST_PROFILE || String(process.pid)).replace(/[^a-zA-Z0-9_-]/g, '_')));
+const signatures = require('./signature-store.cjs').signatureStore(app.getPath('userData'));
 const entry = dev ? 'http://127.0.0.1:5173/' : pathToFileURL(path.join(__dirname, '../dist/index.html')).href;
 function trusted(event) {
   if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || event.senderFrame.url !== entry) throw new Error('Richiesta non consentita.');
@@ -17,7 +20,7 @@ function validateBytes(bytes) {
 }
 app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, cb) => cb(false));
-  mainWindow = new BrowserWindow({ width: 1500, height: 980, minWidth: 960, minHeight: 680, show: !testing, backgroundColor: '#f4f5f7', title: 'Folio', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, devTools: dev } });
+  mainWindow = new BrowserWindow({ width: 1500, height: 980, minWidth: 960, minHeight: 680, show: !testing, backgroundColor: '#f4f5f7', title: 'JFolio', icon: path.join(__dirname, '../dist/jfolio-icon.png'), webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, devTools: dev } });
   Menu.setApplicationMenu(null);
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mainWindow.webContents.on('will-navigate', (event, url) => { if (url !== entry) event.preventDefault(); });
@@ -46,4 +49,6 @@ ipcMain.handle('pdf:print', async (event) => {
   trusted(event);
   return new Promise(resolve => mainWindow.webContents.print({ silent: false, printBackground: true }, (success, reason) => resolve({ success, reason })));
 });
+ipcMain.handle('signature:load', (event) => { trusted(event); return signatures.load(); });
+ipcMain.handle('signature:save', (event, value) => { trusted(event); return signatures.save(value); });
 app.on('window-all-closed', () => app.quit());
