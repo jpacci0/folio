@@ -26,4 +26,23 @@ html,body,#root{height:100%;overflow:hidden}
 .signature-import p{font-size:11px;text-align:center;line-height:1.7;margin:0}
 .signature-error{color:#b33146!important;font-size:12px}
 .forget-signature{margin-top:12px;color:var(--muted)}
-@media(max-height:820px){.welcome{padding:8px 0}.welcome h2{margin-top:16px;margin-bottom:10px}.welcome>p{margin-bottom:18px}.welcome-features{margin-top:24px}}
+@media(max-height:820px){
+  .workspace:has(>.welcome){padding:16px 24px}
+  .welcome{padding:0}
+  .welcome h2{font-size:26px;line-height:1.15;margin:10px 0 8px}
+  .welcome>p{font-size:10px;line-height:1.5;margin-bottom:12px}
+  .dropzone{padding:14px}
+  .upload-illustration{width:48px;height:48px;border-radius:12px;margin-bottom:10px}
+  .upload-illustration>svg{width:30px;height:30px}
+  .dropzone>b{margin-top:12px;padding:8px 12px}
+  .dropzone>small{margin-top:10px}
+  .demo-button{margin-top:12px}
+  .feature-row{margin-top:16px}
+}
+@media(max-height:700px){
+  .welcome>.eyebrow,.welcome>.feature-row{display:none}
+  .welcome .dropzone{display:grid;grid-template-columns:48px 1fr;gap:5px 14px;text-align:left;width:min(100%,390px);padding:14px}
+  .welcome .upload-illustration{grid-row:1 / 5;margin:0}
+  .welcome .dropzone>strong,.welcome .dropzone>span:not(.upload-illustration),.welcome .dropzone>b,.welcome .dropzone>small{grid-column:2;margin:0}
+  .welcome .dropzone>b{justify-self:start;margin:4px 0}
+}
