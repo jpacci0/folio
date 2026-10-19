@@ -51,6 +51,7 @@ test('Welcome has no trailing vertical scroll at desktop sizes; PDFs still scrol
     expect(dimensions.document).toBe(0); expect(dimensions.workspace).toBeLessThanOrEqual(1);
   }
   await page.getByRole('button', { name: /Vuoi dare un/ }).click();
+  await expect(page.locator('.paper canvas')).toBeVisible();
   await expect(page.locator('.page-loading')).toHaveCount(0);
   const overflow = await page.locator('.workspace').evaluate(w => w.scrollHeight - w.clientHeight);
   expect(overflow).toBeGreaterThan(0);
