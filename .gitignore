@@ -9,3 +9,4 @@ playwright-report/
 public/pdf-assets/
 /test-home.png
 /test-editor.png
+/tmp/

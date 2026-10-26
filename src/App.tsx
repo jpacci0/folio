@@ -25,7 +25,7 @@ const errorText = (error: unknown) => error instanceof Error ? error.message : '
 
 export default function App() {
   const history = useHistory();
-  const { pages, commit } = history;
+  const { pages, formValues, commit } = history;
   const [sources, setSources] = useState<Map<string, Source>>(new Map());
   const sourceRef = useRef(sources); sourceRef.current = sources;
   const [fileName, setFileName] = useState('');
@@ -44,7 +44,7 @@ export default function App() {
   const [busy, setBusy] = useState('');
   const busyRef = useRef(false);
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
-  const [savedState, setSavedState] = useState('[]');
+  const [savedState, setSavedState] = useState(JSON.stringify({ pages: [], formValues: {} }));
   const [sidebarTab, setSidebarTab] = useState<'pages' | 'search'>('pages');
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -57,7 +57,8 @@ export default function App() {
   const source = page ? sources.get(page.sourceId) : undefined;
   const readOnly = [...sources.values()].find(s => s.readOnlyReason)?.readOnlyReason;
   const activeMark = page?.marks.find(m => m.id === selected);
-  const dirty = JSON.stringify(pages) !== savedState;
+  const hasForms = [...sources.values()].some(s => !!s.formFields?.length);
+  const dirty = JSON.stringify({ pages, formValues }) !== savedState;
   const showError = useCallback((message: string) => setNotice({ text: message, error: true }), []);
   useEffect(() => {
     let canceled = false;
@@ -89,7 +90,7 @@ export default function App() {
   const openBytes = async (name: string, bytes: Uint8Array, append: boolean) => {
     if (!append && dirty && !window.confirm('Aprire un altro documento e scartare le modifiche non salvate?')) return;
     const nextSource = await loadSource(name, bytes);
-    if (append && nextSource.readOnlyReason) { await nextSource.pdf.destroy(); throw new Error('Questo PDF contiene moduli, campi firma o elementi non modificabili e non può essere unito. Aprilo da solo per leggerlo.'); }
+    if (append && (hasForms || nextSource.readOnlyReason || nextSource.formFields?.length)) { await nextSource.pdf.destroy(); throw new Error('I PDF con moduli vanno aperti separatamente: unire le pagine potrebbe scollegare i campi. Usa Apri un PDF.'); }
     const newPages: PageModel[] = Array.from({ length: nextSource.pdf.numPages }, (_, index) => ({ id: uid(), sourceId: nextSource.id, index, rotation: 0, marks: [] }));
     if (append && pages.length) {
       setSources(previous => new Map([...previous, [nextSource.id, nextSource]]));
@@ -98,14 +99,14 @@ export default function App() {
     } else {
       const old = sourceRef.current;
       setSources(new Map([[nextSource.id, nextSource]]));
-      history.reset(newPages); setSavedState(JSON.stringify(newPages));
+      history.reset(newPages); setSavedState(JSON.stringify({ pages: newPages, formValues: {} }));
       setFileName(name); setActiveIndex(0); setSelected(null); setTool('select'); setQuery(''); setHits([]); textCache.current.clear();
       // Existing render effects are canceled before the old documents are destroyed.
       setTimeout(() => { for (const item of old.values()) void item.pdf.destroy(); }, 250);
     }
   };
   const fileOpen = (append = false) => {
-    if (busyRef.current || (append && readOnly)) return;
+    if (busyRef.current || (append && (readOnly || hasForms))) return;
     if (window.folio) void run('Apertura documento…', async () => {
       const file = await window.folio!.open(); if (file) await openBytes(file.name, new Uint8Array(file.bytes), append);
     });
@@ -151,7 +152,7 @@ export default function App() {
   };
   const getBytes = async () => {
     const response = await fetch(interFontUrl); if (!response.ok) throw new Error('Il font locale non è disponibile.');
-    return exportPdf(pages, sources, new Uint8Array(await response.arrayBuffer()));
+    return exportPdf(pages, sources, new Uint8Array(await response.arrayBuffer()), formValues);
   };
   const download = (bytes: Uint8Array, name: string) => {
     const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
@@ -163,7 +164,7 @@ export default function App() {
     const name = fileName.replace(/\.pdf$/i, '') + '-modificato.pdf';
     if (window.folio) { if (!(await window.folio.save(name, bytes))) return; notify('Copia salvata'); }
     else { download(bytes, name); notify('Copia PDF pronta: controlla i download del browser'); }
-    setSavedState(JSON.stringify(pages));
+    setSavedState(JSON.stringify({ pages, formValues }));
   });
   const print = () => run('Preparazione delle pagine per la stampa…', async () => {
     if (!pages.length) return;
@@ -243,17 +244,18 @@ export default function App() {
         <button className="open-button" onClick={() => fileOpen()}><FolderOpen size={18} />Apri un PDF<span>Ctrl O</span></button>
         <div className="sidebar-tabs"><button className={sidebarTab === 'pages' ? 'active' : ''} onClick={() => setSidebarTab('pages')}><Layers size={15} />Pagine{pages.length > 0 && <span>{pages.length}</span>}</button><button className={sidebarTab === 'search' ? 'active' : ''} onClick={() => setSidebarTab('search')} aria-label="Cerca nel PDF"><Search size={17} /></button></div>
         <div className="sidebar-content">
-          {sidebarTab === 'pages' ? pages.length ? <div className="thumbnail-list">{pages.map((p, i) => <Thumbnail key={p.id} source={sources.get(p.sourceId)!} page={p} index={i} active={i === activeIndex} onClick={() => setActiveIndex(i)} />)}</div> : <div className="sidebar-empty"><FileText size={32} strokeWidth={1.2} /><p>Ogni idea comincia<br />da una pagina.</p><span>I tuoi documenti appariranno qui.</span></div> : <div className="search-panel"><label htmlFor="search-pdf">Cerca nel documento</label><div className="search-input"><Search size={15} /><input id="search-pdf" type="search" placeholder="Una parola, una frase…" value={query} onChange={e => setQuery(e.target.value)} /></div><span className="search-count">{searching ? 'Ricerca…' : query ? `${hits.length} pagine trovate` : 'Il testo delle scansioni richiede OCR.'}</span>{hits.map(hit => <button key={hit.page} className="search-hit" onClick={() => setActiveIndex(hit.page)}><strong>Pagina {hit.page + 1}</strong><span>{hit.snippet}</span></button>)}</div>}
+          {sidebarTab === 'pages' ? pages.length ? <div className="thumbnail-list">{pages.map((p, i) => <Thumbnail formValues={formValues} key={p.id} source={sources.get(p.sourceId)!} page={p} index={i} active={i === activeIndex} onClick={() => setActiveIndex(i)} />)}</div> : <div className="sidebar-empty"><FileText size={32} strokeWidth={1.2} /><p>Ogni idea comincia<br />da una pagina.</p><span>I tuoi documenti appariranno qui.</span></div> : <div className="search-panel"><label htmlFor="search-pdf">Cerca nel documento</label><div className="search-input"><Search size={15} /><input id="search-pdf" type="search" placeholder="Una parola, una frase…" value={query} onChange={e => setQuery(e.target.value)} /></div><span className="search-count">{searching ? 'Ricerca…' : query ? `${hits.length} pagine trovate` : 'Il testo delle scansioni richiede OCR.'}</span>{hits.map(hit => <button key={hit.page} className="search-hit" onClick={() => setActiveIndex(hit.page)}><strong>Pagina {hit.page + 1}</strong><span>{hit.snippet}</span></button>)}</div>}
         </div>
-        {enabled && <button className="append-button" onClick={() => fileOpen(true)}><FilePlus2 size={16} />Aggiungi PDF</button>}
+        {enabled && <button className="append-button" disabled={hasForms} onClick={() => fileOpen(true)}><FilePlus2 size={16} />Aggiungi PDF</button>}
         <div className="privacy-card"><ShieldCheck size={20} /><div><strong>Un po’ più tuo.</strong><p>Nessun upload.<br />Nessun account richiesto.</p></div></div>
       </aside>
       <main className="main">
         <div className="document-header"><div className="document-title"><span className="file-icon"><FileText size={20} /></span><div><h1 title={fileName}>{fileName || 'Il tuo prossimo documento'}</h1><p>{pages.length ? `${pages.length} pagine · ${readOnly ? 'Sola lettura' : dirty ? 'Modifiche non salvate' : 'Pronto per lavorare'}` : 'Un posto semplice per fare di più con i tuoi PDF.'}</p></div>{dirty && <i className="unsaved-dot" title="Modifiche non salvate" />}</div><div className="document-actions"><button aria-label="Stampa" className="button print-button" disabled={!pages.length} onClick={() => void print()}><Printer size={16} /><span>Stampa</span></button><button className="button primary" disabled={!enabled} onClick={() => void save()}><Download size={16} />Salva copia</button></div></div>
         <div className="toolbar"><div className="tool-list">{toolItems.map(item => <button key={item.id} aria-label={item.label} className={`tool-button ${tool === item.id ? 'active' : ''}`} disabled={!pages.length || (!!readOnly && item.id !== 'select')} onClick={() => changeTool(item.id)} title={item.hint}><item.icon size={17} /><span>{item.label}</span></button>)}</div><div className="history-buttons"><IconButton label="Annulla (Ctrl Z)" onClick={() => { history.undo(); setSelected(null); }} disabled={!history.canUndo}><Undo2 size={17} /></IconButton><IconButton label="Ripristina (Ctrl Shift Z)" onClick={() => { history.redo(); setSelected(null); }} disabled={!history.canRedo}><Redo2 size={17} /></IconButton></div></div>
         {readOnly && <div className="readonly-banner"><LockKeyhole size={16} />{readOnly}</div>}
+        {hasForms && !readOnly && <div className="form-banner"><div><FileText size={16} /><strong>Modulo compilabile</strong><span>Fai clic sui campi con Seleziona. Salva una copia per conservare i valori.</span></div>{source?.formWarnings?.map((warning, i) => <p key={i}>{warning}</p>)}</div>}
         <div className="workspace" ref={workspace} onClick={e => { if (e.target === e.currentTarget) setSelected(null); }}>
-          {page && source ? <div className="page-wrap"><PageView source={source} page={page} zoom={zoom} tool={tool} color={color} size={tool === 'draw' ? strokeSize : fontSize} text={text} signature={signature} selected={selected} onSelect={setSelected} onAdd={addMark} onMove={(id, x, y) => editPage(p => ({ ...p, marks: p.marks.map(m => m.id === id ? { ...m, x, y } : m) }))} onError={showError} /><div className="page-caption">{activeIndex + 1} / {pages.length}</div></div> : <div className="welcome">
+          {page && source ? <div className="page-wrap"><PageView source={source} page={page} formValues={formValues} onFormChange={history.commitForm} zoom={zoom} tool={tool} color={color} size={tool === 'draw' ? strokeSize : fontSize} text={text} signature={signature} selected={selected} onSelect={setSelected} onAdd={addMark} onMove={(id, x, y) => editPage(p => ({ ...p, marks: p.marks.map(m => m.id === id ? { ...m, x, y } : m) }))} onError={showError} /><div className="page-caption">{activeIndex + 1} / {pages.length}</div></div> : <div className="welcome">
             <span className="eyebrow"><Sparkles size={14} />MENO ATTRITO. PIÙ IDEE.</span>
             <h2>I tuoi PDF.<br /><em>Una nuova prospettiva.</em></h2>
             <p>Leggi, annota e firma in uno spazio pensato per te.<br />Semplice da usare. Bello da abitare.</p>
@@ -275,7 +277,8 @@ export default function App() {
               {activeMark && <button className="button danger-light" onClick={removeMark}><Trash2 size={15} />Rimuovi annotazione</button>}
             </>}
           </div>
-          {enabled && <div className="page-tools"><label>PAGINA {activeIndex + 1}</label><div className="page-tool-grid"><button onClick={() => editPage(p => ({ ...p, rotation: (p.rotation + 90) % 360 }))}><RotateCw size={18} />Ruota</button><button onClick={duplicatePage}><Copy size={18} />Duplica</button><button disabled={activeIndex === 0} onClick={() => movePage(-1)}><ArrowUp size={18} />Prima</button><button disabled={activeIndex === pages.length - 1} onClick={() => movePage(1)}><ArrowDown size={18} />Dopo</button></div><button className="text-button delete-page" onClick={deletePage} disabled={pages.length < 2}><Trash2 size={14} />Elimina pagina</button></div>}
+          {hasForms && !readOnly && <div className="form-help"><strong>Compila e conserva</strong><p>Usa Tab per passare al campo successivo. Le caselle viola sono compilabili; gli altri campi restano come nell’originale.</p><p>Puoi aggiungere una firma grafica con Firma. I campi restano interattivi anche nella copia salvata.</p><p>Unione, duplicazione e rimozione delle pagine sono disattivate per conservare il modulo.</p></div>}
+          {enabled && <div className="page-tools"><label>PAGINA {activeIndex + 1}</label><div className="page-tool-grid"><button onClick={() => editPage(p => ({ ...p, rotation: (p.rotation + 90) % 360 }))}><RotateCw size={18} />Ruota</button><button disabled={hasForms} title={hasForms ? 'La struttura del modulo viene conservata' : undefined} onClick={duplicatePage}><Copy size={18} />Duplica</button><button disabled={hasForms || activeIndex === 0} onClick={() => movePage(-1)}><ArrowUp size={18} />Prima</button><button disabled={hasForms || activeIndex === pages.length - 1} onClick={() => movePage(1)}><ArrowDown size={18} />Dopo</button></div><button className="text-button delete-page" onClick={deletePage} disabled={hasForms || pages.length < 2}><Trash2 size={14} />Elimina pagina</button></div>}
           <div className="marks-list"><label>ANNOTAZIONI <span>{page?.marks.length || 0}</span></label>{page?.marks.length ? page.marks.map((mark, i) => <button key={mark.id} className={selected === mark.id ? 'active' : ''} onClick={() => { setSelected(mark.id); setTool('select'); }}><span className="mark-color" style={{ background: mark.color }} /><span>{mark.text?.slice(0, 26) || `${markNames[mark.kind]} ${i + 1}`}</span><ChevronRight size={13} /></button>) : <p>Le tue annotazioni di questa pagina appariranno qui.</p>}</div>
           <div className="inspector-bottom"><LockKeyhole size={13} />Salva una copia quando hai finito<br />per conservare il file originale.</div>
         </>}

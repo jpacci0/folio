@@ -1,6 +1,6 @@
 {
   "name": "folio-pdf",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "packageManager": "pnpm@11.25.0",
   "engines": {
@@ -19,7 +19,7 @@
     "desktop:dev": "node scripts/dev-desktop.mjs",
     "build": "tsc -b && vite build",
     "start": "electron .",
-    "test": "tsx --test tests/pdf.test.ts tests/signature.test.ts",
+    "test": "tsx --test tests/pdf.test.ts tests/signature.test.ts tests/forms.test.ts",
     "pretest:ui": "node scripts/prepare-assets.mjs",
     "test:ui": "playwright test",
     "test:desktop": "node tests/desktop.cjs",

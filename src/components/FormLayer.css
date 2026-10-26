@@ -1,0 +1,20 @@
+.form-layer{position:absolute;inset:0;z-index:1;pointer-events:none;transform-origin:0 0;color-scheme:light}
+.form-widget{position:absolute;overflow:visible;pointer-events:none}
+.form-widget-content{position:absolute;inset:0;transform-origin:0 0}
+.form-layer .form-control{display:block;width:100%;height:100%;min-width:0;min-height:0;max-width:none;margin:0;padding:0 2px;border:1px solid #7863e94d;border-radius:1px;background:#fff;color:#202b3d;opacity:1;box-shadow:inset 0 0 0 999px #7863e909;font-family:Arial,Helvetica,sans-serif;line-height:1.15;outline:none;transition:border-color .12s,box-shadow .12s;pointer-events:none}
+.form-layer.is-enabled .form-control{pointer-events:auto}
+.form-layer .form-control:disabled{color:#202b3d;-webkit-text-fill-color:#202b3d;background:#fff;opacity:1;box-shadow:none;cursor:default}
+.form-layer.is-enabled .form-control:hover{border-color:#7863e9a6}
+.form-layer .form-control:focus{border-color:#6652df;box-shadow:0 0 0 2px #6652df38,inset 0 0 0 999px #6652df08;outline:none}
+.form-layer .form-multiline{resize:none;overflow:auto;padding:1px 2px;white-space:pre-wrap;line-height:1.2}
+.form-layer .form-list{padding:0;overflow:auto}
+.form-layer .form-list option{padding:0 2px}
+.form-layer select.form-control:not([multiple]):not([size]){appearance:auto;padding-right:0}
+.form-layer .form-toggle{appearance:none;padding:0;position:relative;cursor:pointer}
+.form-layer .form-toggle[type=radio]{border-radius:50%}
+.form-layer .form-toggle:checked::before{content:"";display:block;position:absolute;inset:13%;background:#202b3d}
+.form-layer .form-toggle[type=radio]:checked::before{border-radius:50%;inset:23%}
+.form-layer .form-toggle[type=checkbox]:checked::before{clip-path:polygon(12% 46%,36% 70%,86% 16%,100% 30%,37% 96%,0 59%)}
+@media(prefers-reduced-motion:reduce){.form-layer .form-control{transition:none}}
+
+
