@@ -1,14 +1,14 @@
 # JFolio PDF
 
-Un'app desktop per Windows, con interfaccia in italiano, per leggere, annotare, firmare graficamente e organizzare PDF. Versione 0.2.0: una base funzionante da sviluppare, non una sostituzione completa di Acrobat Pro.
+Un'app desktop per Windows, con interfaccia in italiano, per leggere, annotare, firmare graficamente e organizzare PDF. Versione 0.3.0: una base funzionante da sviluppare, non una sostituzione completa di Acrobat Pro.
 
 ## Per provarla
 
 La distribuzione Windows si trova in `release`. L'app compilata non richiede Node.js, WSL, account o server. La prima schermata contiene **Prova un documento**, un PDF di esempio generato in memoria.
 
-Per l'uso quotidiano scegli **`JFolio-0.2.0-Setup-x64.exe`**: installa JFolio per il tuo utente Windows, crea i collegamenti sul Desktop e nel menu Start e include la disinstallazione da Impostazioni > App. Dopo l'installazione avvia JFolio dal collegamento, non rilanciare il setup. I file vengono estratti solo durante l'installazione.
+Per l'uso quotidiano scegli **`JFolio-0.3.0-Setup-x64.exe`**: installa JFolio per il tuo utente Windows, crea i collegamenti sul Desktop e nel menu Start e include la disinstallazione da Impostazioni > App. Dopo l'installazione avvia JFolio dal collegamento, non rilanciare il setup. I file vengono estratti solo durante l'installazione.
 
-**`JFolio-0.2.0-Windows.exe`** resta la versione portable a file singolo: non richiede installazione ma estrae il runtime a ogni avvio, che può quindi impiegare più tempo. Entrambe le versioni sono per Windows x64 e non hanno ancora una firma con certificato di code signing.
+**`JFolio-0.3.0-Windows.exe`** resta la versione portable a file singolo: non richiede installazione ma estrae il runtime a ogni avvio, che può quindi impiegare più tempo. Entrambe le versioni sono per Windows x64 e non hanno ancora una firma con certificato di code signing.
 
 Per sviluppare nella cartella richiesta, estrai la cartella `folio` dall'archivio dei sorgenti in `Documenti\progetti`. Il codice non dipende dal percorso di questa sessione.
 
@@ -26,7 +26,8 @@ Per sviluppare nella cartella richiesta, estrai la cartella `folio` dall'archivi
 - Esportazione in PDF, conservando i contenuti originali vettoriali delle pagine.
 - Preparazione di tutte le pagine con le annotazioni e apertura della stampa di sistema.
 - Tema chiaro/scuro, scorciatoie, indicatore modifiche e avviso prima della chiusura.
-- PDF con moduli o campi firma: apertura e stampa in sola lettura.
+- Compilazione AcroForm: testo, caselle, radio ed elenchi; i campi restano interattivi dopo il salvataggio.
+- PDF XFA o con campi firma digitale: apertura e stampa in sola lettura.
 
 Le annotazioni esportate vengono incorporate nella pagina; alla riapertura sono parte del PDF e non oggetti JFolio separatamente modificabili. La firma viene conservata sul dispositivo tra le aperture. Puoi sostituirla o eliminarla dal pannello Firma. In Windows il file è in `%APPDATA%/folio-pdf/signature-v1.json`, condiviso tra installer e portable; nel browser viene usato localStorage. Non viene sincronizzata su GitHub o su altri PC.
 
@@ -34,10 +35,12 @@ Le annotazioni esportate vengono incorporate nella pagina; alla riapertura sono 
 
 - **Non sostituisce il testo già esistente** nel PDF. Inserisce nuovo testo; non simula modifiche nascondendo informazioni con rettangoli bianchi.
 - **Non applica e non verifica firme digitali con certificati**. La firma grafica non equivale a una firma PAdES o a una firma qualificata.
-- Non include OCR, redazione sicura, conversione Word, compressione avanzata, compilazione moduli o collaborazione.
+- Non include OCR, redazione sicura, conversione Word, compressione avanzata o collaborazione.
 - I PDF con password non sono supportati. Non viene tentata la rimozione delle protezioni.
 - Il controllo dei campi firma serve a limitare modifiche accidentali, non è una validazione crittografica.
-- L'esportazione ricompone le pagine: allegati, segnalibri, struttura di accessibilità e metadati a livello di documento non sono preservati. Conserva sempre il file originale.
+- Per i moduli vengono conservati il documento e l’albero AcroForm originale: unione, duplicazione, riordino e rimozione pagine sono disattivati. Compilazione, annotazioni, firma grafica e rotazione sono disponibili.
+- Calcoli, convalide, formattazioni e pulsanti JavaScript incorporati non vengono eseguiti: i campi calcolati mantengono i valori originali. Un avviso identifica i documenti interessati. Verifica i risultati in un lettore compatibile.
+- Per i PDF senza moduli l'esportazione ricompone le pagine: allegati, segnalibri, struttura di accessibilità e metadati a livello di documento non sono preservati. Conserva sempre il file originale.
 - Il testo aggiunto usa Inter Latin: italiano e alfabeti latini comuni; non tutti gli alfabeti o le emoji sono supportati.
 - La stampa usa immagini delle pagine a 108 dpi. L'esportazione PDF rimane vettoriale; per stampa tipografica o formati misti preferire l'esportazione e verificare formato/scalatura nel dialogo di stampa.
 - Non c'è ancora un salvataggio automatico del progetto o ripristino dopo un crash. Salva una copia del PDF prima di chiudere.
@@ -71,6 +74,7 @@ electron/          Main process, dialoghi file/stampa e bridge IPC
 src/App.tsx        Stato della sessione e interfaccia
 src/components/   Pagina, miniature e dialogo firma
 src/pdf-engine.ts Coordinate, annotazioni ed esportazione
+src/pdf-forms.ts  Campi AcroForm, valori, appearance e recupero widget
 src/pdf-loader.ts Apertura PDF e modalità sola lettura
 src/useHistory.ts Cronologia modifiche
 src/styles.css    Temi e layout
@@ -109,7 +113,7 @@ npx pnpm@11.25.0 start
 
 Per la cartella Windows portatile: `npx pnpm@11.25.0 run pack`. Usa esplicitamente `run`: `pnpm pack` è un comando di pnpm che crea un archivio npm dei sorgenti. Il risultato dello script è `release/JFolio-Windows`: avvia `JFolio.exe` e conserva accanto tutti gli altri file della cartella. Non richiede ulteriori strumenti di packaging. Per creare anche l'eseguibile autoestraente: `npx pnpm@11.25.0 pack:exe`; questo passaggio può scaricare gli strumenti NSIS. L'app già compilata funziona offline.
 
-Per generare l'installer Windows, dopo `pack` esegui `npx pnpm@11.25.0 pack:installer`. Il risultato è `release/JFolio-0.2.0-Setup-x64.exe`. La procedura guidata è disponibile in italiano e inglese. La disinstallazione conserva le preferenze dell'app. Pubblica il setup come allegato della Release GitHub, insieme all'eventuale portable; gli eseguibili restano esclusi dalla cronologia Git.
+Per generare l'installer Windows, dopo `pack` esegui `npx pnpm@11.25.0 pack:installer`. Il risultato è `release/JFolio-0.3.0-Setup-x64.exe`. La procedura guidata è disponibile in italiano e inglese. La disinstallazione conserva le preferenze dell'app. Pubblica il setup come allegato della Release GitHub, insieme all'eventuale portable; gli eseguibili restano esclusi dalla cronologia Git.
 
 ## Verifica
 
@@ -146,7 +150,7 @@ Il test desktop intercetta i dialoghi di apertura/salvataggio, salva e riapre un
 ## Prossimi passi consigliati
 
 1. Decidere se per “modificare” è essenziale cambiare il testo originale o se annotazioni e compilazione coprono l'uso principale.
-2. Aggiungere compilazione AcroForm e formato progetto con salvataggio automatico.
+2. Aggiungere formato progetto con salvataggio automatico e ampliare la compatibilità dei moduli.
 3. Scegliere un motore per il vero editing del contenuto: valutare SDK commerciale contro costo e complessità di un motore open source; esaminare le relative licenze prima di distribuire.
 4. Aggiungere OCR, associazione dei file `.pdf`, trascinamento per riordino e aggiornamenti firmati.
 5. Valutare PAdES separatamente: certificati, provider, verifica delle firme e conservazione del documento firmato.

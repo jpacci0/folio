@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
-import { TextLayer } from 'pdfjs-dist';
+import { AnnotationMode, TextLayer } from 'pdfjs-dist';
 import type { RenderTask } from 'pdfjs-dist';
-import type { Mark, PageModel, Point, Signature, Source, Tool } from '../types';
+import type { FormValue, FormValues, Mark, PageModel, Point, Signature, Source, Tool } from '../types';
 import { normalizeRotation, rotationTransform, strokeMark, toBase, uid } from '../pdf-engine';
+
+import FormLayer from './FormLayer';
 
 export function MarkShape({ mark, width, height }: { mark: Mark; width: number; height: number }) {
   const x = mark.x * width, y = mark.y * height, w = mark.width * width, h = mark.height * height;
@@ -14,7 +16,7 @@ export function MarkShape({ mark, width, height }: { mark: Mark; width: number; 
 }
 
 type Props = {
-  source: Source; page: PageModel; zoom: number; tool: Tool; color: string; size: number;
+  source: Source; page: PageModel; formValues: FormValues; onFormChange: (name: string, value: FormValue) => void; zoom: number; tool: Tool; color: string; size: number;
   text: string; signature: Signature | null; selected: string | null;
   onSelect: (id: string | null) => void; onAdd: (mark: Mark) => void;
   onMove: (id: string, x: number, y: number) => void; onError: (message: string) => void;
@@ -106,6 +108,7 @@ export function PageView(props: Props) {
   return <div className={`paper tool-${tool}`} style={{ width: displayWidth * zoom, height: displayHeight * zoom }} aria-label="Pagina PDF">
     <canvas ref={canvas} />
     <div ref={textLayer} className={`textLayer ${tool !== 'select' ? 'disabled' : ''}`} />
+    {!source.readOnlyReason && <FormLayer source={source} page={page} zoom={zoom} values={props.formValues} onChange={props.onFormChange} enabled={tool === 'select' && ready} onError={onError} />}
     <svg className={`annotations ${tool === 'select' ? 'select-mode' : ''}`} viewBox={`0 0 ${displayWidth} ${displayHeight}`} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { gesture.current = null; setDraft(null); }}>
       <g transform={rotationTransform(page.rotation, baseWidth, baseHeight)}>
         {page.marks.map(mark => <g key={mark.id} data-mark={mark.id} className="mark" style={{ visibility: draft?.id === mark.id ? 'hidden' : undefined }}>
@@ -119,7 +122,7 @@ export function PageView(props: Props) {
   </div>;
 }
 
-export function Thumbnail({ source, page, index, active, onClick }: { source: Source; page: PageModel; index: number; active: boolean; onClick: () => void }) {
+export function Thumbnail({ source, page, index, active, onClick, formValues }: { source: Source; page: PageModel; index: number; active: boolean; onClick: () => void; formValues: FormValues }) {
   const canvas = useRef<HTMLCanvasElement>(null), button = useRef<HTMLButtonElement>(null);
   const [visible, setVisible] = useState(false);
   const [dims, setDims] = useState({ width: 595, height: 842 });
@@ -136,10 +139,17 @@ export function Thumbnail({ source, page, index, active, onClick }: { source: So
       const rotated = p.getViewport({ scale: 1, rotation: normalizeRotation(p.rotate + page.rotation) });
       const viewport = p.getViewport({ scale: Math.min(126 / rotated.width, 166 / rotated.height) * 1.5, rotation: rotated.rotation });
       const c = canvas.current!; c.width = Math.ceil(viewport.width); c.height = Math.ceil(viewport.height);
-      task = p.render({ canvas: c, viewport }); return task.promise;
+      const fields = new Map((source.formFields || []).map(field => [field.name, field]));
+      for (const widget of source.formWidgets || []) {
+        const field = fields.get(widget.fieldName);
+        if (!field || field.readOnly) continue;
+        const value = Object.hasOwn(formValues, field.name) ? formValues[field.name] : field.value;
+        source.pdf.annotationStorage.setValue(widget.id, { value: field.kind === 'radio' ? value === widget.exportValue : value });
+      }
+      task = p.render({ canvas: c, viewport, annotationMode: AnnotationMode.ENABLE_STORAGE }); return task.promise;
     }).catch(() => { /* The main view reports page errors. */ });
     return () => { canceled = true; task?.cancel(); };
-  }, [visible, source, page.index, page.rotation]);
+  }, [visible, source, page.index, page.rotation, formValues]);
   const turned = page.rotation % 180 !== 0;
   return <button ref={button} className={`thumbnail ${active ? 'active' : ''}`} onClick={onClick} aria-label={`Pagina ${index + 1}`} aria-current={active ? 'page' : undefined}>
     <div className="thumbnail-paper"><canvas ref={canvas} /><svg viewBox={`0 0 ${turned ? dims.height : dims.width} ${turned ? dims.width : dims.height}`}><g transform={rotationTransform(page.rotation, dims.width, dims.height)}>{page.marks.map(mark => <MarkShape key={mark.id} mark={mark} width={dims.width} height={dims.height} />)}</g></svg></div>

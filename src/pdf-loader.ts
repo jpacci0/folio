@@ -1,6 +1,7 @@
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { PDFDocument, PDFSignature } from 'pdf-lib';
+import { PDFDocument } from 'pdf-lib';
+import { inspectForms } from './pdf-forms';
 import { MAX_FILE_SIZE, uid } from './pdf-engine';
 import type { Source } from './types';
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -16,12 +17,11 @@ export async function loadSource(name: string, bytes: Uint8Array): Promise<Sourc
     if ((error as Error).name === 'PasswordException') throw new Error('I PDF protetti da password non sono ancora supportati. Apri una copia senza password.');
     throw new Error('Non riesco ad aprire questo PDF: potrebbe essere danneggiato.');
   }
-  let readOnlyReason: string | undefined;
   try {
     const doc = await PDFDocument.load(bytes);
-    const fields = doc.getForm().getFields();
-    if (fields.some(f => f instanceof PDFSignature)) readOnlyReason = 'Questo PDF contiene campi firma: in questa versione puoi leggerlo e stamparlo. Modificarlo potrebbe invalidare una firma digitale.';
-    else if (fields.length) readOnlyReason = 'Questo PDF contiene moduli interattivi: in questa versione puoi leggerlo e stamparlo. La modifica dei moduli sarà aggiunta in seguito.';
-  } catch { readOnlyReason = 'Questo PDF è visualizzabile, ma non è compatibile con il motore di modifica. Puoi leggerlo e stamparlo.'; }
-  return { id: uid(), name, bytes, pdf, readOnlyReason };
+    const forms = await inspectForms(doc, pdf);
+    return { id: uid(), name, bytes, pdf, ...forms };
+  } catch {
+    return { id: uid(), name, bytes, pdf, readOnlyReason: 'Questo PDF è visualizzabile, ma non è compatibile con il motore di modifica. Puoi leggerlo e stamparlo.' };
+  }
 }

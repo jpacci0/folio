@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
-import type { Mark, PageModel, Point, Source } from './types';
+import type { FormValues, Mark, PageModel, Point, Source } from './types';
+import { applyFormValues, FORM_STRUCTURE_REASON, recoverOrphanFields } from './pdf-forms';
 
 export const MAX_FILE_SIZE = 150 * 1024 * 1024;
 export const uid = () => crypto.randomUUID();
@@ -31,20 +32,35 @@ export function strokeMark(points: Point[], ink: string, size: number): Mark | n
 }
 
 /** Copy source pages without rasterizing them; apply marks in PDF user space. */
-export async function exportPdf(pages: PageModel[], sources: Map<string, Source>, fontBytes?: Uint8Array) {
+export async function exportPdf(pages: PageModel[], sources: Map<string, Source>, fontBytes?: Uint8Array, formValues: FormValues = {}) {
   if (!pages.length) throw new Error('Il documento deve contenere almeno una pagina.');
-  const output = await PDFDocument.create();
-  output.registerFontkit(fontkit);
-  const font = fontBytes ? await output.embedFont(fontBytes, { subset: true }) : await output.embedFont(StandardFonts.Helvetica);
-  const images = new Map<string, Awaited<ReturnType<typeof output.embedPng>>>();
+  // Page-copying drops the document-level AcroForm tree. A form is always
+  // edited in its original document, with page identity/order preserved.
   const loaded = new Map<string, PDFDocument>();
+  let formSource: Source | undefined;
   for (const model of pages) {
     const source = sources.get(model.sourceId);
     if (!source) throw new Error('Documento di origine non disponibile.');
     if (source.readOnlyReason) throw new Error(source.readOnlyReason);
-    if (!loaded.has(source.id)) loaded.set(source.id, await PDFDocument.load(source.bytes));
-    const [page] = await output.copyPages(loaded.get(source.id)!, [model.index]);
-    output.addPage(page);
+    if (!loaded.has(source.id)) {
+      const doc = await PDFDocument.load(source.bytes);
+      recoverOrphanFields(doc);
+      loaded.set(source.id, doc);
+      if (doc.getForm().getFields().length || doc.getForm().hasXFA()) formSource = source;
+    }
+  }
+  if (formSource && (loaded.size !== 1 || pages.length !== formSource.pdf.numPages || pages.some((page, i) => page.sourceId !== formSource!.id || page.index !== i))) throw new Error(FORM_STRUCTURE_REASON);
+  const output = formSource ? loaded.get(formSource.id)! : await PDFDocument.create();
+  output.registerFontkit(fontkit);
+  const font = fontBytes ? await output.embedFont(fontBytes, { subset: true }) : await output.embedFont(StandardFonts.Helvetica);
+  const images = new Map<string, Awaited<ReturnType<typeof output.embedPng>>>();
+  if (formSource) applyFormValues(output, formValues, font);
+  for (const model of pages) {
+    const source = sources.get(model.sourceId);
+    if (!source) throw new Error('Documento di origine non disponibile.');
+    if (source.readOnlyReason) throw new Error(source.readOnlyReason);
+    const page = formSource ? output.getPage(model.index) : (await output.copyPages(loaded.get(source.id)!, [model.index]))[0];
+    if (!formSource) output.addPage(page);
     const original = await source.pdf.getPage(model.index + 1);
     const viewport = original.getViewport({ scale: 1 });
     const w = viewport.width, h = viewport.height;
@@ -76,7 +92,7 @@ export async function exportPdf(pages: PageModel[], sources: Map<string, Source>
     page.setRotation(degrees(normalizeRotation(viewport.rotation + model.rotation)));
   }
   output.setCreator('JFolio PDF'); output.setProducer('JFolio • pdf-lib');
-  return output.save();
+  return output.save({ updateFieldAppearances: false });
 }
 
 export async function createWelcomePdf() {

@@ -60,12 +60,13 @@ test('Search, page management, original protection and invalid files', async ({ 
   await expect(page.getByRole('heading', { name: 'Benvenuto in JFolio.pdf' })).toBeVisible();
 });
 
-test('Forms are read only; print prepares only document pages', async ({ page }) => {
+test('Forms can be filled; print prepares only document pages', async ({ page }) => {
   const doc = await PDFDocument.create(); const p = doc.addPage(); const field = doc.getForm().createTextField('Nome'); field.setText('Jacopo'); field.addToPage(p, { x: 50, y: 500, width: 200, height: 30 });
   await page.goto('/');
   await page.locator('input[type=file]').setInputFiles({ name: 'Modulo.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await doc.save()) });
-  await expect(page.locator('.readonly-banner')).toContainText('moduli interattivi');
-  await expect(page.getByRole('button', { name: 'Salva copia' })).toBeDisabled();
+  await expect(page.locator('.form-banner')).toContainText('Modulo compilabile');
+  await page.getByRole('textbox', { name: 'Nome', exact: true }).fill('Mario Rossi');
+  await expect(page.getByRole('button', { name: 'Salva copia' })).toBeEnabled();
   await page.evaluate(() => { window.print = () => { (window as unknown as { printed: number }).printed = document.querySelectorAll('#print-root .print-sheet img').length; }; });
   await page.getByRole('button', { name: 'Stampa', exact: true }).click();
   await expect(page.locator('.busy-overlay')).toHaveCount(0);

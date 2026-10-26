@@ -46,3 +46,8 @@ html,body,#root{height:100%;overflow:hidden}
   .welcome .dropzone>strong,.welcome .dropzone>span:not(.upload-illustration),.welcome .dropzone>b,.welcome .dropzone>small{grid-column:2;margin:0}
   .welcome .dropzone>b{justify-self:start;margin:4px 0}
 }
+
+.annotations{z-index:2}.page-loading{z-index:3}
+.form-banner{padding:10px 22px;background:var(--accent-soft);color:var(--ink);font-size:11px;line-height:1.5;border-bottom:1px solid var(--line);flex-shrink:0}
+.form-banner>div{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.form-banner strong{color:var(--accent);font-weight:600}.form-banner svg{color:var(--accent);flex-shrink:0}.form-banner p{margin:5px 0 0;color:var(--muted);font-size:10px}
+.form-help{margin:0 23px;padding:15px 0;border-bottom:1px solid var(--line);font-size:10px;line-height:1.7;color:var(--muted)}.form-help strong{color:var(--accent);font-size:11px}.form-help p{margin:7px 0}

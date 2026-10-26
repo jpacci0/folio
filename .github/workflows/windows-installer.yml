@@ -3,7 +3,7 @@ name: JFolio Windows release
 on:
   workflow_dispatch:
   push:
-    branches: [codex/jfolio-signatures]
+    branches: [codex/jfolio-forms]
 
 permissions:
   contents: write
@@ -31,11 +31,11 @@ jobs:
           node-version: '24'
       - name: Install locked dependencies
         run: npx --yes pnpm@11.25.0 install --frozen-lockfile
-      - name: Test PDF engine and signature persistence
+      - name: Test PDF engine, forms and signature persistence
         run: npx pnpm@11.25.0 test
       - name: Install test browser
         run: npx pnpm@11.25.0 exec playwright install chromium
-      - name: Test editor, signatures and window layout
+      - name: Test editor, interactive forms, signatures and window layout
         run: npx pnpm@11.25.0 test:ui
       - name: Build Windows app and verify icon
         run: |
@@ -67,6 +67,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Installed app smoke test failed' }
           node tests/signature-desktop.cjs
           if ($LASTEXITCODE -ne 0) { throw 'Signature restart test failed' }
+          node tests/forms-desktop.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Installed interactive form test failed' }
           foreach ($file in @($setup, (Join-Path $PWD "release/JFolio-$version-Windows.exe"))) {
             if ((Get-Item -LiteralPath $file).Length -lt 10000000) { throw 'Package unexpectedly small' }
             $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
